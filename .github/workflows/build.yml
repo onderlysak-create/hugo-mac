@@ -15,35 +15,37 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Sestavit Huga
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p Hugo.app/Contents/MacOS
-          swiftc -target x86_64-apple-macos13.0 \
+
+          swiftc -parse-as-library -target x86_64-apple-macos13.0 \
             -o Hugo.app/Contents/MacOS/Hugo Hugo.swift
 
-          cat > Hugo.app/Contents/Info.plist <<'EOF'
+          cat > Hugo.app/Contents/Info.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>CFBundleExecutable</key>
-            <string>Hugo</string>
-            <key>CFBundleIdentifier</key>
-            <string>cz.hugo.tamagotchi</string>
-            <key>CFBundleName</key>
-            <string>Hugo</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>13.0</string>
+            <key>CFBundleExecutable</key><string>Hugo</string>
+            <key>CFBundleIdentifier</key><string>cz.hugo.tamagotchi</string>
+            <key>CFBundleName</key><string>Hugo</string>
+            <key>CFBundleDisplayName</key><string>Hugo</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
           </dict>
           </plist>
-          EOF
+          PLIST
 
-          zip -r Hugo-Intel.zip Hugo.app
+          plutil -lint Hugo.app/Contents/Info.plist
+          chmod +x Hugo.app/Contents/MacOS/Hugo
+          ditto -c -k --keepParent Hugo.app Hugo-Intel.zip
 
       - name: Pripravit ke stazeni
         uses: actions/upload-artifact@v4
         with:
           name: Hugo-Intel-Mac
           path: Hugo-Intel.zip
+          if-no-files-found: error
