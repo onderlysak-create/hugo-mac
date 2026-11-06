@@ -209,7 +209,7 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { g in
             ZStack(alignment: .topLeading) {
-                Image("HugoScene")
+                Image(nsImage: NSImage(contentsOf: Bundle.main.path(forResource: "HugoScene", ofType: "png") ?? "") ?? NSImage())
                     .resizable().aspectRatio(contentMode: .fill)
                     .frame(width: g.size.width, height: g.size.height).clipped()
                 // All controls are native SwiftUI elements over the illustrated scene.
@@ -297,7 +297,7 @@ struct WalkingHugo: View {
     @State private var footstep = false
     private let timer = Timer.publish(every: 0.18, on: .main, in: .common).autoconnect()
     var body: some View {
-        Image("HugoWalk")
+        Image(nsImage: NSImage(contentsOf: Bundle.main.path(forResource: "HugoWalk", ofType: "png") ?? "") ?? NSImage())
             .resizable().scaledToFit()
             .frame(width: 190, height: 220)
             .offset(y: footstep ? -5 : 3)
