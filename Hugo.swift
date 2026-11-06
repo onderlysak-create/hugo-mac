@@ -17,6 +17,7 @@ final class HugoModel: ObservableObject {
     @Published var sound = true
     @Published var walking = false
     private var audio: AVAudioPlayer?
+    private var snore: AVAudioPlayer?
     private let key = "HugoPetStateV1"
     init() {
         if let data = UserDefaults.standard.data(forKey: key), let p = try? JSONDecoder().decode(PetState.self, from: data) { pet = p }
@@ -33,12 +34,20 @@ final class HugoModel: ObservableObject {
         case "Hraj": pet.happiness = min(100, pet.happiness + 22); pet.energy = max(0, pet.energy - 12); pet.hunger = max(0, pet.hunger - 8); message = "Házej míček! Haf!"; tone(410)
         case "Pohlaď": pet.happiness = min(100, pet.happiness + 12); message = "Chrocht, chrocht… ❤️"; tone(145)
         case "Vykoupej": pet.cleanliness = 100; message = "Teď krásně voním!"; tone(500)
-        case "Spi": asleep.toggle(); pet.energy = min(100, pet.energy + (asleep ? 28 : 0)); message = asleep ? "Chrrrr… zzz…" : "Už jsem vzhůru!"; tone(120)
+        case "Spi": asleep.toggle(); pet.energy = min(100, pet.energy + (asleep ? 28 : 0)); message = asleep ? "Chrrrr… zzz…" : "Už jsem vzhůru!"; if asleep { playSnore() } else { snore?.stop() }
         default: break
         }
         save()
     }
+    func playSnore() {
+        guard sound, let url = Bundle.main.url(forResource: "HugoSnore", withExtension: "m4a") else { return }
+        snore = try? AVAudioPlayer(contentsOf: url)
+        snore?.numberOfLoops = -1
+        snore?.volume = 0.65
+        snore?.play()
+    }
     func tick() {
+        if !sound { snore?.stop() } else if asleep && snore?.isPlaying != true { playSnore() }
         if !asleep { pet.hunger = max(0, pet.hunger - 0.12); pet.energy = max(0, pet.energy - 0.07); pet.cleanliness = max(0, pet.cleanliness - 0.04) }
         else { pet.energy = min(100, pet.energy + 0.3) }
         if pet.hunger < 20 { message = "Mám hlad… 🥺" }
@@ -193,82 +202,106 @@ struct DogView: View {
 struct ContentView: View {
     @ObservedObject var model: HugoModel
     let goWalk: () -> Void
-    let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    @State private var breathing = false
+    @State private var blink = false
+    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private let blinkTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
     var body: some View {
-        ZStack {
-            SpookyScene()
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("🐾 HUGO").font(.system(size: 38, weight: .black, design: .serif))
-                        .foregroundColor(parchment).shadow(color: .black, radius: 5)
-                    Text("MY LITTLE MONSTER").font(.system(size: 10, weight: .bold, design: .serif))
-                        .tracking(3).foregroundColor(lilac)
-                    Spacer()
-                    Text(model.message).font(.system(size: 17, weight: .semibold, design: .serif))
-                        .foregroundColor(parchment).padding(12)
-                        .background(ink.opacity(0.88), in: RoundedRectangle(cornerRadius: 12))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.frame(width: 190)
-                Spacer(minLength: 0)
-                VStack(spacing: 13) {
-                    Text("HUGOVY POTŘEBY").font(.system(size: 16, weight: .bold, design: .serif)).tracking(2).foregroundColor(parchment)
-                    meter("🍖 Hlad", model.pet.hunger)
+        GeometryReader { g in
+            ZStack(alignment: .topLeading) {
+                Image("HugoScene")
+                    .resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: g.size.width, height: g.size.height).clipped()
+                // All controls are native SwiftUI elements over the illustrated scene.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("HUGOVY POTŘEBY")
+                        .font(.system(size: 17, weight: .black, design: .serif)).tracking(1.5)
+                        .frame(maxWidth: .infinity)
+                    meter("🍗 Hlad", model.pet.hunger)
                     meter("❤️ Radost", model.pet.happiness)
-                    meter("🌙 Energie", model.pet.energy)
+                    meter("⚡ Energie", model.pet.energy)
                     meter("🫧 Čistota", model.pet.cleanliness)
-                    Divider().overlay(parchment.opacity(0.3))
-                    Toggle("Zvukové projevy", isOn: $model.sound).toggleStyle(.checkbox).foregroundColor(parchment)
+                    Divider().overlay(parchment)
+                    Toggle("Zvukové projevy", isOn: $model.sound)
+                        .toggleStyle(.checkbox)
+                        .font(.system(size: 13, weight: .medium))
                 }
-                .padding(16).frame(width: 244)
-                .background(ink.opacity(0.87), in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(parchment.opacity(0.45), lineWidth: 1.5))
+                .foregroundColor(parchment)
+                .padding(13)
+                .frame(width: g.size.width * 0.264)
+                .background(Color(red: 0.09, green: 0.075, blue: 0.09).opacity(0.97), in: RoundedRectangle(cornerRadius: 15))
+                .overlay(RoundedRectangle(cornerRadius: 15).stroke(Color(red: 0.68, green: 0.49, blue: 0.28), lineWidth: 2))
+                .position(x: g.size.width * 0.839, y: g.size.height * 0.259)
+
+                // Clickable illustrated dog, with subtle breathing and a sleep cue.
+                Button { model.act("Pohlaď") } label: {
+                    Color.clear.frame(width: g.size.width * 0.44, height: g.size.height * 0.49)
+                }
+                .buttonStyle(.plain)
+                .position(x: g.size.width * 0.47, y: g.size.height * 0.50)
+                if model.asleep {
+                    Text("Z z z")
+                        .font(.system(size: 29, weight: .bold, design: .serif))
+                        .foregroundColor(.white)
+                        .shadow(color: .purple, radius: 12)
+                        .offset(y: breathing ? -11 : 5)
+                        .animation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true), value: breathing)
+                        .position(x: g.size.width * 0.69, y: g.size.height * 0.38)
+                }
+                Text(model.message)
+                    .font(.system(size: 13, weight: .semibold, design: .serif))
+                    .foregroundColor(parchment)
+                    .lineLimit(2)
+                    .frame(width: g.size.width * 0.175, height: g.size.height * 0.075)
+                    .background(ink.opacity(0.96), in: RoundedRectangle(cornerRadius: 9))
+                    .position(x: g.size.width * 0.108, y: g.size.height * 0.84)
+                HStack(spacing: 0) {
+                    action("Nakrm", width: 0.111, g: g)
+                    action("Hraj", width: 0.111, g: g)
+                    action("Pohlaď", width: 0.111, g: g)
+                    action("Vykoupej", width: 0.111, g: g)
+                    action("Spi", width: 0.111, g: g)
+                    Button(action: goWalk) { Color.clear }
+                        .buttonStyle(.plain)
+                        .frame(width: g.size.width * 0.111, height: g.size.height * 0.10)
+                }
+                .position(x: g.size.width * 0.61, y: g.size.height * 0.839)
             }
-            .padding(22)
-            .frame(maxHeight: .infinity, alignment: .top)
-            DogView(sleeping: model.asleep, walking: false).scaleEffect(1.10).offset(x: -15, y: 30)
-                .onTapGesture { model.act("Pohlaď") }
-            VStack {
-                Spacer()
-                HStack(spacing: 9) {
-                    action("🍖 Nakrmit", "Nakrm")
-                    action("🎾 Hrát", "Hraj")
-                    action("❤️ Pohladit", "Pohlaď")
-                    action("🫧 Vykoupat", "Vykoupej")
-                    action(model.asleep ? "☀️ Vzbudit" : "🌙 Spát", "Spi")
-                    Button("🐾 Procházka") { goWalk() }.buttonStyle(GothicButtonStyle())
-                }.padding(.horizontal, 16)
-                Text("Klikni na Huga a pohlaď ho  •  Stav se ukládá automaticky")
-                    .font(.system(size: 11)).foregroundColor(parchment.opacity(0.7)).padding(.top, 12)
-            }.padding(.bottom, 22)
         }
-        .frame(width: 880, height: 590)
+        .frame(width: 1000, height: 678)
+        .onAppear { breathing = true }
         .onReceive(timer) { _ in model.tick() }
+        .onReceive(blinkTimer) { _ in blink.toggle() }
     }
-    func meter(_ label: String, _ value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack { Text(label); Spacer(); Text("\(Int(value)) %") }
-                .font(.system(size: 13, weight: .medium)).foregroundColor(parchment)
-            GeometryReader { g in
+    func meter(_ name: String, _ value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack { Text(name); Spacer(); Text("\(Int(value)) %") }
+                .font(.system(size: 13, weight: .semibold, design: .serif))
+            GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.12))
-                    Capsule().fill(lilac).frame(width: max(0, g.size.width * CGFloat(value / 100)))
+                    Capsule().fill(.white.opacity(0.16))
+                    Capsule().fill(Color(red: 0.77, green: 0.52, blue: 0.91))
+                        .frame(width: geo.size.width * CGFloat(max(0, min(100, value))) / 100)
                 }
-            }.frame(height: 10)
+            }.frame(height: 9)
         }
     }
-    func action(_ label: String, _ key: String) -> some View {
-        Button(label) { model.act(key) }.buttonStyle(GothicButtonStyle())
+    func action(_ key: String, width: CGFloat, g: GeometryProxy) -> some View {
+        Button { model.act(key) } label: { Color.clear }
+            .buttonStyle(.plain)
+            .frame(width: g.size.width * width, height: g.size.height * 0.10)
     }
 }
 
-struct GothicButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .bold, design: .serif))
-            .foregroundColor(ink)
-            .padding(.horizontal, 10).frame(height: 50)
-            .background(parchment.opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: 11))
-            .overlay(RoundedRectangle(cornerRadius: 11).stroke(ink.opacity(0.8), lineWidth: 2))
+struct WalkingHugo: View {
+    @State private var footstep = false
+    private let timer = Timer.publish(every: 0.18, on: .main, in: .common).autoconnect()
+    var body: some View {
+        Image("HugoWalk")
+            .resizable().scaledToFit()
+            .frame(width: 190, height: 220)
+            .offset(y: footstep ? -5 : 3)
+            .onReceive(timer) { _ in withAnimation(.easeInOut(duration: 0.17)) { footstep.toggle() } }
     }
 }
 
@@ -281,7 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var idleTimer: Timer?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let content = ContentView(model: model, goWalk: { [weak self] in self?.walk() })
-        window = NSWindow(contentRect: NSRect(x: 150, y: 150, width: 880, height: 590), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 150, y: 150, width: 1000, height: 678), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Hugo – My Little Monster"
         window.contentView = NSHostingView(rootView: content)
         window.center(); window.makeKeyAndOrderFront(nil)
@@ -298,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = false
         w.level = .floating; w.ignoresMouseEvents = true
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        w.contentView = NSHostingView(rootView: DogView(sleeping: false, walking: true).scaleEffect(0.65).frame(width: 220, height: 230))
+        w.contentView = NSHostingView(rootView: WalkingHugo().frame(width: 220, height: 230))
         w.orderFrontRegardless(); walkWindow = w
         model.message = "Hugo vyrazil na výpravu! 🐾"; model.tone(320)
         steps = 0
