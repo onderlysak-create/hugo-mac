@@ -1,0 +1,49 @@
+
+name: Sestavit Huga pro Intel Mac
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Stahnout projekt
+        uses: actions/checkout@v4
+
+      - name: Sestavit Huga
+        run: |
+          mkdir -p Hugo.app/Contents/MacOS
+          swiftc -target x86_64-apple-macos13.0 \
+            -o Hugo.app/Contents/MacOS/Hugo Hugo.swift
+
+          cat > Hugo.app/Contents/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>Hugo</string>
+            <key>CFBundleIdentifier</key>
+            <string>cz.hugo.tamagotchi</string>
+            <key>CFBundleName</key>
+            <string>Hugo</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>13.0</string>
+          </dict>
+          </plist>
+          EOF
+
+          zip -r Hugo-Intel.zip Hugo.app
+
+      - name: Pripravit ke stazeni
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hugo-Intel-Mac
+          path: Hugo-Intel.zip
