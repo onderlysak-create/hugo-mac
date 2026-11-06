@@ -1,51 +1,38 @@
-
-name: Sestavit Huga pro Intel Mac
-
+name: Sestavit Huga 3.0 pro Intel Mac
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: macos-15-intel
-
     steps:
       - name: Stahnout projekt
         uses: actions/checkout@v4
-
       - name: Sestavit Huga
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p Hugo.app/Contents/MacOS
-
-          swiftc -parse-as-library -target x86_64-apple-macos13.0 \
-            -o Hugo.app/Contents/MacOS/Hugo Hugo.swift
-
+          mkdir -p Hugo.app/Contents/MacOS Hugo.app/Contents/Resources
+          swiftc -parse-as-library -target x86_64-apple-macos13.0 -o Hugo.app/Contents/MacOS/Hugo Hugo.swift
+          cp Assets/HugoScene.png Assets/HugoWalk.png Assets/HugoSnore.m4a Hugo.app/Contents/Resources/
           cat > Hugo.app/Contents/Info.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key><string>Hugo</string>
-            <key>CFBundleIdentifier</key><string>cz.hugo.tamagotchi</string>
-            <key>CFBundleName</key><string>Hugo</string>
-            <key>CFBundleDisplayName</key><string>Hugo</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>LSMinimumSystemVersion</key><string>13.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict>
-          </plist>
+          <plist version="1.0"><dict>
+          <key>CFBundleExecutable</key><string>Hugo</string>
+          <key>CFBundleIdentifier</key><string>cz.hugo.tamagotchi</string>
+          <key>CFBundleName</key><string>Hugo</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>LSMinimumSystemVersion</key><string>13.0</string>
+          </dict></plist>
           PLIST
-
           plutil -lint Hugo.app/Contents/Info.plist
           chmod +x Hugo.app/Contents/MacOS/Hugo
           ditto -c -k --keepParent Hugo.app Hugo-Intel.zip
-
       - name: Pripravit ke stazeni
         uses: actions/upload-artifact@v4
         with:
-          name: Hugo-Intel-Mac
+          name: Hugo-3-Intel-Mac
           path: Hugo-Intel.zip
           if-no-files-found: error
