@@ -120,6 +120,11 @@ struct DogView: View {
     let sleeping: Bool
     @State private var bounce = false
     @State private var blink = false
+    @State private var stepForward = false
+    @State private var earTwitch = false
+    let walking: Bool
+    private let motionTimer = Timer.publish(every: 0.28, on: .main, in: .common).autoconnect()
+    private let blinkTimer = Timer.publish(every: 3.7, on: .main, in: .common).autoconnect()
     private let fur = Color(red: 0.19, green: 0.18, blue: 0.21)
     private let shade = Color(red: 0.12, green: 0.11, blue: 0.14)
     var body: some View {
@@ -128,11 +133,15 @@ struct DogView: View {
             // Back paws and body
             Ellipse().fill(shade).frame(width: 175, height: 150).offset(y: 55)
             Ellipse().fill(fur).frame(width: 200, height: 193).offset(y: -22)
-            ear(-76, angle: -19); ear(76, angle: 19)
+            ear(-76, angle: -19).rotationEffect(.degrees(earTwitch ? -5 : 0), anchor: .bottom)
+            ear(76, angle: 19).rotationEffect(.degrees(earTwitch ? 5 : 0), anchor: .bottom)
             Ellipse().fill(Color(red: 0.28, green: 0.26, blue: 0.29)).frame(width: 91, height: 86).offset(y: 38)
             if sleeping {
                 Text("⌣         ⌣").font(.system(size: 37, weight: .bold)).foregroundColor(parchment).offset(y: -38)
                 Text("Z z z").font(.system(size: 28, design: .serif)).foregroundColor(lilac).offset(x: 138, y: -125)
+            } else if blink {
+                Capsule().fill(parchment).frame(width: 54, height: 7).offset(x: -48, y: -44)
+                Capsule().fill(parchment).frame(width: 54, height: 7).offset(x: 48, y: -44)
             } else {
                 eye(-48); eye(48)
             }
@@ -142,14 +151,29 @@ struct DogView: View {
             RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.44, green: 0.28, blue: 0.35)).frame(width: 139, height: 20).offset(y: 88)
             Circle().fill(Color(red: 0.75, green: 0.59, blue: 0.34)).frame(width: 42, height: 42).offset(y: 105)
             Text("HUGO").font(.system(size: 13, weight: .black, design: .serif)).foregroundColor(ink).offset(y: 105)
-            Ellipse().fill(fur).frame(width: 51, height: 35).offset(x: -65, y: 127)
-            Ellipse().fill(fur).frame(width: 51, height: 35).offset(x: 65, y: 127)
+            Ellipse().fill(fur).frame(width: 51, height: 35)
+                .rotationEffect(.degrees(walking && stepForward ? 18 : -6))
+                .offset(x: -65, y: walking && stepForward ? 115 : 130)
+            Ellipse().fill(fur).frame(width: 51, height: 35)
+                .rotationEffect(.degrees(walking && !stepForward ? -18 : 6))
+                .offset(x: 65, y: walking && !stepForward ? 115 : 130)
         }
         .frame(width: 340, height: 350)
         .scaleEffect(bounce ? 1.0 : 0.98)
-        .offset(y: bounce ? -3 : 3)
+        .offset(y: walking ? (stepForward ? -7 : 1) : (bounce ? -3 : 3))
         .animation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true), value: bounce)
+        .animation(.easeInOut(duration: 0.24), value: stepForward)
+        .animation(.easeInOut(duration: 0.24), value: earTwitch)
         .onAppear { bounce = true }
+        .onReceive(motionTimer) { _ in
+            if walking { stepForward.toggle() }
+            if Int.random(in: 0..<11) == 0 { earTwitch.toggle() }
+        }
+        .onReceive(blinkTimer) { _ in
+            guard !sleeping else { return }
+            blink = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { blink = false }
+        }
     }
     func ear(_ x: CGFloat, angle: Double) -> some View {
         ZStack {
@@ -201,7 +225,7 @@ struct ContentView: View {
             }
             .padding(22)
             .frame(maxHeight: .infinity, alignment: .top)
-            DogView(sleeping: model.asleep).scaleEffect(1.10).offset(x: -15, y: 30)
+            DogView(sleeping: model.asleep, walking: false).scaleEffect(1.10).offset(x: -15, y: 30)
                 .onTapGesture { model.act("Pohlaď") }
             VStack {
                 Spacer()
@@ -274,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = false
         w.level = .floating; w.ignoresMouseEvents = true
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        w.contentView = NSHostingView(rootView: DogView(sleeping: false).scaleEffect(0.65).frame(width: 220, height: 230))
+        w.contentView = NSHostingView(rootView: DogView(sleeping: false, walking: true).scaleEffect(0.65).frame(width: 220, height: 230))
         w.orderFrontRegardless(); walkWindow = w
         model.message = "Hugo vyrazil na výpravu! 🐾"; model.tone(320)
         steps = 0
